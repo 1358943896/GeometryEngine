@@ -1,0 +1,2 @@
+add_shared_lib_auto(geometry)
+target_link_libraries(geometry base)

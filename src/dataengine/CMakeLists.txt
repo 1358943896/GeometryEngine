@@ -1,0 +1,2 @@
+add_shared_lib_auto(dataengine)
+target_link_libraries(dataengine geometry)

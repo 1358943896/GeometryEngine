@@ -1,0 +1,1 @@
+add_shared_lib_auto(base)

@@ -8,44 +8,57 @@
 
 namespace geo
 {
-    // 多边形：支持多部件，每个部件为一个独立多边形环
+    // 多边形：支持多部件，每个部件为一个带洞多边形
+    // 数据结构遵循 OGC 标准：PartList 中每个元素是一个 RingList
+    // RingList 的第一个元素是外环（exterior ring），后续元素是内环（interior rings/holes）
     class GeoRegion : public Geometry
     {
     public:
         using VertexList = std::vector<Coord>;
-        using PartList   = std::vector<VertexList>;
+        using RingList   = std::vector<VertexList>;  // [0]=外环, [1..]=内环
+        using PartList   = std::vector<RingList>;    // 多部件列表
 
         GeoRegion();
 
-        //! \brief 构造单部件多边形
-        //! \param vertices 顶点列表
+        //! \brief 构造单部件无洞多边形
+        //! \param vertices 外环顶点列表
         explicit GeoRegion(VertexList vertices);
 
         GeoRegion(std::initializer_list<Coord> vertices);
 
+        //! \brief 构造单部件带洞多边形
+        //! \param rings 环列表，第一个是外环，后续是内环
+        explicit GeoRegion(RingList rings);
+
         //! \brief 构造多部件多边形
-        //! \param parts 各部件顶点列表
+        //! \param parts 各部件环列表
         explicit GeoRegion(PartList parts);
 
         //! \brief 返回部件数量
         std::size_t partCount() const;
 
-        //! \brief 返回指定部件的顶点列表（只读）
+        //! \brief 返回指定部件的外环（只读）
         //! \param i 部件索引
-        const VertexList &part(std::size_t i) const;
+        const VertexList &exteriorRing(std::size_t i) const;
 
-        //! \brief 返回指定部件的顶点列表（可写）
+        //! \brief 返回指定部件的内环数量
         //! \param i 部件索引
-        VertexList &part(std::size_t i);
+        std::size_t interiorRingCount(std::size_t i) const;
 
-        //! \brief 添加一个新部件
-        //! \param vertices 新部件顶点列表
-        void addPart(VertexList vertices);
+        //! \brief 返回指定部件的指定内环（只读）
+        //! \param partIdx 部件索引
+        //! \param ringIdx 内环索引（0=第一个内环）
+        const VertexList &interiorRing(std::size_t partIdx, std::size_t ringIdx) const;
+
+        //! \brief 为指定部件添加内环（洞）
+        //! \param i 部件索引
+        //! \param ring 内环顶点列表
+        void addInteriorRing(std::size_t i, VertexList ring);
 
         //! \brief 返回所有部件的边总数
         std::size_t edgeCount() const;
 
-        // 迭代器：遍历各部件（VertexList）
+        // 迭代器：遍历各部件（RingList）
         PartList::const_iterator begin() const;
         PartList::const_iterator end() const;
         PartList::iterator begin();

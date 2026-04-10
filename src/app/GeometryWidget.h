@@ -4,6 +4,7 @@
 #include "geometry/GeoPoint.h"
 #include "geometry/GeoRegion.h"
 #include "geometry/Geometry.h"
+#include "app/Layer.h"
 #include <QOpenGLWidget>
 #include <QOpenGLExtraFunctions>
 #include <QOpenGLShaderProgram>
@@ -11,6 +12,7 @@
 
 //! \brief 基于 QOpenGLWidget 的几何图形绘制控件（现代管线）
 //! 支持缩放（滚轮）、平移（左键拖拽）、点击选中（整体多部件选中）
+//! 支持按图层样式绘制
 class GeometryWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
 {
     Q_OBJECT
@@ -19,7 +21,11 @@ public:
     explicit GeometryWidget(QWidget *parent = nullptr);
     ~GeometryWidget() override;
 
-    //! \brief 设置要绘制的几何对象列表（不取所有权）
+    //! \brief 设置要绘制的图层列表
+    //! \param layers 图层指针列表（不拥有所有权）
+    void setLayers(std::vector<Layer *> layers);
+
+    //! \brief 设置要绘制的几何对象列表（不取所有权）- 兼容旧接口
     //! \param geometries 指向 Geometry 的指针列表
     void setGeometries(std::vector<const geo::Geometry *> geometries);
 
@@ -75,16 +81,24 @@ private:
     void uploadAndDraw(const std::vector<float> &verts, GLenum mode,
                        float r, float g, float b, float a);
 
-    //! \brief 绘制单个几何对象
+    //! \brief 绘制单个几何对象（使用全局样式）
     //! \param geom     目标几何对象
     //! \param selected 是否高亮选中色
     void drawGeometry(const geo::Geometry *geom, bool selected);
 
+    //! \brief 绘制单个几何对象（使用图层样式）
+    //! \param geom     目标几何对象
+    //! \param layer    图层（提供样式）
+    //! \param selected 是否高亮选中色
+    void drawGeometry(const geo::Geometry *geom, const Layer *layer, bool selected);
+
     //! \brief 将所有几何对象的包围盒合并，用于初始化视图
     void fitView();
 
-    std::vector<const geo::Geometry *> geometries_;
+    std::vector<const geo::Geometry *> geometries_;  //!< 兼容旧接口的几何列表
+    std::vector<Layer *> layers_;                    //!< 图层列表
     int selectedIndex_ = -1;
+    int selectedLayerIndex_ = -1;  //!< 选中的图层索引
 
     // 视图变换参数
     double scale_  = 1.0;

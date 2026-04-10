@@ -10,7 +10,16 @@ find_package(Qt6 COMPONENTS
         OpenGL
         OpenGLWidgets
         REQUIRED)
+
 add_executable_auto(GeometryViewer)
+
+# 手动添加 include 目录下的头文件，确保 MOC 能处理带 Q_OBJECT 的头文件
+target_sources(GeometryViewer PRIVATE
+        ${CMAKE_SOURCE_DIR}/include/app/Layer.h
+        ${CMAKE_SOURCE_DIR}/include/app/LayerManagerWidget.h
+)
+
+target_include_directories(GeometryViewer PRIVATE ${CMAKE_SOURCE_DIR}/include)
 target_link_libraries(GeometryViewer
         Qt6::Core
         Qt6::Gui

@@ -86,25 +86,26 @@ static std::unique_ptr<geo::Geometry> parseWkt(const std::string &wkt)
 
     if (upper.rfind("MULTIPOLYGON", 0) == 0)
     {
-        // MULTIPOLYGON (((x y,...),(x y,...)),((x y,...)))
+        // MULTIPOLYGON (((外环, 内环...)), ((外环, 内环...)))
+        // 每个括号块是一个 polygon（带洞多边形）
         geo::GeoRegion::PartList parts;
         for (const auto &polyStr : splitTopLevel(innerContent(s)))
         {
-            // 每个 polygon 取第一个环（外环）
-            std::string ringStr = innerContent(trim(polyStr));
-            auto rings = splitTopLevel(ringStr);
-            if (!rings.empty())
-                parts.push_back(parseRing(innerContent(rings[0])));
+            // 解析单个 polygon 的所有环
+            geo::GeoRegion::RingList rings;
+            for (const auto &ringStr : splitTopLevel(innerContent(trim(polyStr))))
+                rings.push_back(parseRing(innerContent(trim(ringStr))));
+            parts.push_back(std::move(rings));
         }
         return std::make_unique<geo::GeoRegion>(std::move(parts));
     }
     else if (upper.rfind("POLYGON", 0) == 0)
     {
-        // POLYGON ((x y,...),(x y,...)) — 取第一个环（外环）
-        geo::GeoRegion::PartList parts;
+        // POLYGON ((外环), (内环1), (内环2), ...) — 第一个环是外环，后续是内环
+        geo::GeoRegion::RingList rings;
         for (const auto &ringStr : splitTopLevel(innerContent(s)))
-            parts.push_back(parseRing(innerContent(trim(ringStr))));
-        return std::make_unique<geo::GeoRegion>(std::move(parts));
+            rings.push_back(parseRing(innerContent(trim(ringStr))));
+        return std::make_unique<geo::GeoRegion>(std::move(rings));
     }
     else if (upper.rfind("MULTILINESTRING", 0) == 0)
     {

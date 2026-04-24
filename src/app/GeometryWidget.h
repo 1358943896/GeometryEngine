@@ -25,18 +25,6 @@ public:
     //! \param layers 图层指针列表（不拥有所有权）
     void setLayers(std::vector<Layer *> layers);
 
-    //! \brief 设置要绘制的几何对象列表（不取所有权）- 兼容旧接口
-    //! \param geometries 指向 Geometry 的指针列表
-    void setGeometries(std::vector<const geo::Geometry *> geometries);
-
-    //! \brief 设置点的显示大小（像素）
-    //! \param size 点大小
-    void setPointSize(int size);
-
-    //! \brief 设置线宽（像素）
-    //! \param width 线宽
-    void setLineWidth(int width);
-
 protected:
     //! \brief 初始化 OpenGL：编译 shader，创建 VAO/VBO
     void initializeGL() override;
@@ -68,11 +56,12 @@ private:
     bool hitTest(const geo::Geometry *geom, double wx, double wy) const;
 
     //! \brief 将折线顶点序列扩展为宽线四边形带（TRIANGLE_STRIP）
-    //! \param pts    折线顶点（世界坐标，x/y 交替）
-    //! \param closed 是否闭合（LINE_LOOP）
+    //! \param pts       折线顶点（世界坐标，x/y 交替）
+    //! \param closed    是否闭合（LINE_LOOP）
+    //! \param lineWidth 线宽（像素）
     //! \return TRIANGLE_STRIP 顶点数组
     std::vector<float> buildWideLineStrip(const std::vector<float> &pts,
-                                          bool closed) const;
+                                          bool closed, float lineWidth) const;
 
     //! \brief 上传顶点数据并绘制一次 draw call
     //! \param verts 顶点数组（x,y 交替）
@@ -80,11 +69,6 @@ private:
     //! \param color RGBA 颜色
     void uploadAndDraw(const std::vector<float> &verts, GLenum mode,
                        float r, float g, float b, float a);
-
-    //! \brief 绘制单个几何对象（使用全局样式）
-    //! \param geom     目标几何对象
-    //! \param selected 是否高亮选中色
-    void drawGeometry(const geo::Geometry *geom, bool selected);
 
     //! \brief 绘制单个几何对象（使用图层样式）
     //! \param geom     目标几何对象
@@ -95,9 +79,7 @@ private:
     //! \brief 将所有几何对象的包围盒合并，用于初始化视图
     void fitView();
 
-    std::vector<const geo::Geometry *> geometries_;  //!< 兼容旧接口的几何列表
     std::vector<Layer *> layers_;                    //!< 图层列表
-    int selectedIndex_ = -1;
     int selectedLayerIndex_ = -1;  //!< 选中的图层索引
 
     // 视图变换参数
@@ -126,6 +108,5 @@ private:
 
     static constexpr double kHitRadius = 8.0;
 
-    float pointSize_ = 10.0f;
-    float lineWidth_ = 1.5f;
+    static constexpr float kDefaultLineWidth = 1.5f;
 };

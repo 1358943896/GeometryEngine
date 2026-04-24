@@ -77,9 +77,6 @@ public:
     //! \brief 返回几何对象列表（只读）
     const std::vector<std::unique_ptr<geo::Geometry>> &geometries() const;
 
-    //! \brief 返回几何对象指针列表（用于传递给绘制控件）
-    std::vector<const geo::Geometry *> geometryPtrs() const;
-
 private:
     QString name_;                                  //!< 图层名称
     std::vector<std::unique_ptr<geo::Geometry>> geometries_;  //!< 几何对象

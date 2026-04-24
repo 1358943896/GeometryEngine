@@ -15,9 +15,8 @@
 
 namespace
 {
-// 自定义树项角色
 const int kLayerPtrRole = Qt::UserRole + 1;      //!< 存储 Layer 指针
-const int kStyleTypeRole = Qt::UserRole + 2;     //!< 样式类型：0=点颜色,1=点大小,2=线颜色,3=线宽,4=面线颜色,5=面线宽,6=面填充颜色,7=面填充开关
+const int kStyleTypeRole = Qt::UserRole + 2;     //!< 存储 StyleItemType 值
 }
 
 LayerManagerWidget::LayerManagerWidget(QWidget *parent)
@@ -115,7 +114,7 @@ void LayerManagerWidget::onItemChanged(QTreeWidgetItem *item, int column)
     {
         // 样式子项：处理填充开关
         int styleType = item->data(0, kStyleTypeRole).toInt();
-        if (styleType == 7)  // 填充开关
+        if (styleType == RegionFillToggle)
         {
             Layer *layer = getLayerFromStyleItem(item);
             if (layer)
@@ -144,48 +143,49 @@ void LayerManagerWidget::onItemDoubleClicked(QTreeWidgetItem *item, int column)
     if (!layer) return;
 
     // 颜色类型：打开颜色选择器
-    if (styleType == 0 || styleType == 2 || styleType == 4 || styleType == 6)
+    if (styleType == PointColor || styleType == LineColor ||
+        styleType == RegionLineColor || styleType == RegionFillColor)
     {
         QColor currentColor;
-        if (styleType == 0) currentColor = layer->pointStyle().color;
-        else if (styleType == 2) currentColor = layer->lineStyle().color;
-        else if (styleType == 4) currentColor = layer->regionStyle().lineColor;
-        else if (styleType == 6) currentColor = layer->regionStyle().fillColor;
+        if (styleType == PointColor) currentColor = layer->pointStyle().color;
+        else if (styleType == LineColor) currentColor = layer->lineStyle().color;
+        else if (styleType == RegionLineColor) currentColor = layer->regionStyle().lineColor;
+        else if (styleType == RegionFillColor) currentColor = layer->regionStyle().fillColor;
 
         QColor newColor = QColorDialog::getColor(currentColor, this, QStringLiteral("选择颜色"),
                                                   QColorDialog::ShowAlphaChannel);
         if (newColor.isValid())
         {
-            if (styleType == 0) layer->pointStyle().color = newColor;
-            else if (styleType == 2) layer->lineStyle().color = newColor;
-            else if (styleType == 4) layer->regionStyle().lineColor = newColor;
-            else if (styleType == 6) layer->regionStyle().fillColor = newColor;
+            if (styleType == PointColor) layer->pointStyle().color = newColor;
+            else if (styleType == LineColor) layer->lineStyle().color = newColor;
+            else if (styleType == RegionLineColor) layer->regionStyle().lineColor = newColor;
+            else if (styleType == RegionFillColor) layer->regionStyle().fillColor = newColor;
 
             updateStyleDisplay(item->parent(), layer);
             emit layerChanged();
         }
     }
     // 数值类型：打开输入对话框
-    else if (styleType == 1 || styleType == 3 || styleType == 5)
+    else if (styleType == PointSize || styleType == LineWidth || styleType == RegionLineWidth)
     {
         float currentValue = 1.0f;
         float minValue = 0.5f;
         float maxValue = 50.0f;
         QString title;
 
-        if (styleType == 1)
+        if (styleType == PointSize)
         {
             currentValue = layer->pointStyle().size;
             maxValue = 100.0f;
             title = QStringLiteral("设置点大小");
         }
-        else if (styleType == 3)
+        else if (styleType == LineWidth)
         {
             currentValue = layer->lineStyle().width;
             maxValue = 20.0f;
             title = QStringLiteral("设置线宽");
         }
-        else if (styleType == 5)
+        else if (styleType == RegionLineWidth)
         {
             currentValue = layer->regionStyle().lineWidth;
             maxValue = 20.0f;
@@ -198,20 +198,14 @@ void LayerManagerWidget::onItemDoubleClicked(QTreeWidgetItem *item, int column)
         if (ok)
         {
             float value = static_cast<float>(newValue);
-            if (styleType == 1) layer->pointStyle().size = value;
-            else if (styleType == 3) layer->lineStyle().width = value;
-            else if (styleType == 5) layer->regionStyle().lineWidth = value;
+            if (styleType == PointSize) layer->pointStyle().size = value;
+            else if (styleType == LineWidth) layer->lineStyle().width = value;
+            else if (styleType == RegionLineWidth) layer->regionStyle().lineWidth = value;
 
             updateStyleDisplay(item->parent(), layer);
             emit layerChanged();
         }
     }
-}
-
-void LayerManagerWidget::onStyleChanged()
-{
-    // 此方法目前未使用，保留以备将来扩展
-    // 样式变化现在在 onItemChanged 中直接处理
 }
 
 QTreeWidgetItem *LayerManagerWidget::createLayerItem(Layer *layer)
@@ -245,46 +239,46 @@ void LayerManagerWidget::addStyleItems(QTreeWidgetItem *parentItem, Layer *layer
         // 点样式：颜色、点大小
         auto *colorItem = new QTreeWidgetItem(parentItem);
         colorItem->setText(0, QStringLiteral("颜色"));
-        colorItem->setData(0, kStyleTypeRole, 0);
+        colorItem->setData(0, kStyleTypeRole, PointColor);
         colorItem->setBackground(0, layer->pointStyle().color);
 
         auto *sizeItem = new QTreeWidgetItem(parentItem);
         sizeItem->setText(0, QStringLiteral("大小: %1").arg(layer->pointStyle().size));
-        sizeItem->setData(0, kStyleTypeRole, 1);
+        sizeItem->setData(0, kStyleTypeRole, PointSize);
     }
     else if (type == Type::Line)
     {
         // 线样式：颜色、线宽
         auto *colorItem = new QTreeWidgetItem(parentItem);
         colorItem->setText(0, QStringLiteral("颜色"));
-        colorItem->setData(0, kStyleTypeRole, 2);
+        colorItem->setData(0, kStyleTypeRole, LineColor);
         colorItem->setBackground(0, layer->lineStyle().color);
 
         auto *widthItem = new QTreeWidgetItem(parentItem);
         widthItem->setText(0, QStringLiteral("线宽: %1").arg(layer->lineStyle().width));
-        widthItem->setData(0, kStyleTypeRole, 3);
+        widthItem->setData(0, kStyleTypeRole, LineWidth);
     }
     else // Region
     {
         // 面样式：线颜色、线宽、填充颜色、填充开关
         auto *lineColorItem = new QTreeWidgetItem(parentItem);
         lineColorItem->setText(0, QStringLiteral("线颜色"));
-        lineColorItem->setData(0, kStyleTypeRole, 4);
+        lineColorItem->setData(0, kStyleTypeRole, RegionLineColor);
         lineColorItem->setBackground(0, layer->regionStyle().lineColor);
 
         auto *lineWidthItem = new QTreeWidgetItem(parentItem);
         lineWidthItem->setText(0, QStringLiteral("线宽: %1").arg(layer->regionStyle().lineWidth));
-        lineWidthItem->setData(0, kStyleTypeRole, 5);
+        lineWidthItem->setData(0, kStyleTypeRole, RegionLineWidth);
 
         auto *fillColorItem = new QTreeWidgetItem(parentItem);
         fillColorItem->setText(0, QStringLiteral("填充颜色"));
-        fillColorItem->setData(0, kStyleTypeRole, 6);
+        fillColorItem->setData(0, kStyleTypeRole, RegionFillColor);
         fillColorItem->setBackground(0, layer->regionStyle().fillColor);
 
         auto *fillToggleItem = new QTreeWidgetItem(parentItem);
         fillToggleItem->setText(0, QStringLiteral("显示填充"));
         fillToggleItem->setCheckState(0, layer->regionStyle().showFill ? Qt::Checked : Qt::Unchecked);
-        fillToggleItem->setData(0, kStyleTypeRole, 7);
+        fillToggleItem->setData(0, kStyleTypeRole, RegionFillToggle);
     }
 }
 
@@ -303,28 +297,28 @@ void LayerManagerWidget::updateStyleDisplay(QTreeWidgetItem *item, Layer *layer)
 
         switch (styleType)
         {
-        case 0: // 点颜色
+        case PointColor:
             styleItem->setBackground(0, layer->pointStyle().color);
             break;
-        case 1: // 点大小
+        case PointSize:
             styleItem->setText(0, QStringLiteral("大小: %1").arg(layer->pointStyle().size));
             break;
-        case 2: // 线颜色
+        case LineColor:
             styleItem->setBackground(0, layer->lineStyle().color);
             break;
-        case 3: // 线宽
+        case LineWidth:
             styleItem->setText(0, QStringLiteral("线宽: %1").arg(layer->lineStyle().width));
             break;
-        case 4: // 面线颜色
+        case RegionLineColor:
             styleItem->setBackground(0, layer->regionStyle().lineColor);
             break;
-        case 5: // 面线宽
+        case RegionLineWidth:
             styleItem->setText(0, QStringLiteral("线宽: %1").arg(layer->regionStyle().lineWidth));
             break;
-        case 6: // 面填充颜色
+        case RegionFillColor:
             styleItem->setBackground(0, layer->regionStyle().fillColor);
             break;
-        case 7: // 面填充开关
+        case RegionFillToggle:
             styleItem->setCheckState(0, layer->regionStyle().showFill ? Qt::Checked : Qt::Unchecked);
             break;
         }

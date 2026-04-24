@@ -59,32 +59,8 @@ GeometryWidget::~GeometryWidget()
 void GeometryWidget::setLayers(std::vector<Layer *> layers)
 {
     layers_ = std::move(layers);
-    geometries_.clear();
-    selectedIndex_ = -1;
     selectedLayerIndex_ = -1;
     fitView();
-    update();
-}
-
-void GeometryWidget::setGeometries(std::vector<const geo::Geometry *> geometries)
-{
-    geometries_ = std::move(geometries);
-    layers_.clear();
-    selectedIndex_ = -1;
-    selectedLayerIndex_ = -1;
-    fitView();
-    update();
-}
-
-void GeometryWidget::setPointSize(int size)
-{
-    pointSize_ = static_cast<float>(size);
-    update();
-}
-
-void GeometryWidget::setLineWidth(int width)
-{
-    lineWidth_ = static_cast<float>(width);
     update();
 }
 
@@ -171,13 +147,6 @@ void GeometryWidget::paintGL()
             }
         }
     }
-    else
-    {
-        // 兼容旧接口：使用全局样式
-        shader_.setUniformValue(uPointSize_, pointSize_);
-        for (std::size_t i = 0; i < geometries_.size(); ++i)
-            drawGeometry(geometries_[i], static_cast<int>(i) == selectedIndex_);
-    }
 
     shader_.release();
 }
@@ -233,41 +202,24 @@ void GeometryWidget::mouseReleaseEvent(QMouseEvent *event)
     if (delta.manhattanLength() < 4)
     {
         auto [wx, wy] = screenToWorld(event->pos().x(), event->pos().y());
-        selectedIndex_ = -1;
         selectedLayerIndex_ = -1;
 
-        // 图层模式：从最上层（列表末尾）开始检测，只选中第一个命中的图层
-        if (!layers_.empty())
+        // 从最上层（列表末尾）开始检测，只选中第一个命中的图层
+        for (int li = static_cast<int>(layers_.size()) - 1; li >= 0; --li)
         {
-            // 反向遍历，从最上层开始
-            for (int li = static_cast<int>(layers_.size()) - 1; li >= 0; --li)
-            {
-                Layer *layer = layers_[li];
-                if (!layer || !layer->isVisible()) continue;
+            Layer *layer = layers_[li];
+            if (!layer || !layer->isVisible()) continue;
 
-                const auto &geoms = layer->geometries();
-                for (std::size_t gi = 0; gi < geoms.size(); ++gi)
-                {
-                    if (hitTest(geoms[gi].get(), wx, wy))
-                    {
-                        selectedLayerIndex_ = li;
-                        break;
-                    }
-                }
-                if (selectedLayerIndex_ >= 0) break;  // 找到最上层的命中图层后停止
-            }
-        }
-        else
-        {
-            // 兼容旧接口
-            for (std::size_t i = 0; i < geometries_.size(); ++i)
+            const auto &geoms = layer->geometries();
+            for (std::size_t gi = 0; gi < geoms.size(); ++gi)
             {
-                if (hitTest(geometries_[i], wx, wy))
+                if (hitTest(geoms[gi].get(), wx, wy))
                 {
-                    selectedIndex_ = static_cast<int>(i);
+                    selectedLayerIndex_ = li;
                     break;
                 }
             }
+            if (selectedLayerIndex_ >= 0) break;  // 找到最上层的命中图层后停止
         }
         update();
     }
@@ -401,121 +353,6 @@ void GeometryWidget::uploadAndDraw(const std::vector<float> &verts, GLenum mode,
     glBindVertexArray(0);
 }
 
-void GeometryWidget::drawGeometry(const geo::Geometry *geom, bool selected)
-{
-    using Type = geo::Geometry::GeometryType;
-
-    const float cr = selected ? 1.0f : 1.0f;
-    const float cg = selected ? 0.85f : 1.0f;
-    const float cb = selected ? 0.0f : 1.0f;
-
-    if (geom->type() == Type::Point)
-    {
-        // 圆形点：fragment shader 用 gl_PointCoord 裁剪
-        shader_.setUniformValue(uIsPoint_, 1);
-        std::vector<float> verts;
-        verts.reserve(geom->vertexCount() * 2);
-        for (std::size_t i = 0; i < geom->vertexCount(); ++i)
-        {
-            const auto &v = geom->vertex(i);
-            verts.push_back(static_cast<float>(v.x));
-            verts.push_back(static_cast<float>(v.y));
-        }
-        uploadAndDraw(verts, GL_POINTS, cr, cg, cb, 1.0f);
-        shader_.setUniformValue(uIsPoint_, 0);
-    }
-    else if (geom->type() == Type::Line)
-    {
-        // 宽线：CPU 生成 TRIANGLE_STRIP 四边形带
-        const auto *line = static_cast<const geo::GeoLine *>(geom);
-        for (std::size_t p = 0; p < line->partCount(); ++p)
-        {
-            const auto &part = line->part(p);
-            std::vector<float> pts;
-            pts.reserve(part.size() * 2);
-            for (const auto &v : part)
-            {
-                pts.push_back(static_cast<float>(v.x));
-                pts.push_back(static_cast<float>(v.y));
-            }
-            auto strip = buildWideLineStrip(pts, false);
-            uploadAndDraw(strip, GL_TRIANGLE_STRIP, cr, cg, cb, 1.0f);
-        }
-    }
-    else // Region
-    {
-        const auto *region = static_cast<const geo::GeoRegion *>(geom);
-        for (std::size_t p = 0; p < region->partCount(); ++p)
-        {
-            const auto &exterior = region->exteriorRing(p);
-            const std::size_t interiorCount = region->interiorRingCount(p);
-
-            // 准备外环顶点数据
-            std::vector<float> exteriorPts;
-            exteriorPts.reserve(exterior.size() * 2);
-            for (const auto &v : exterior)
-            {
-                exteriorPts.push_back(static_cast<float>(v.x));
-                exteriorPts.push_back(static_cast<float>(v.y));
-            }
-
-            // 准备所有内环顶点数据
-            std::vector<std::vector<float>> interiorPtsList;
-            for (std::size_t ri = 0; ri < interiorCount; ++ri)
-            {
-                const auto &interior = region->interiorRing(p, ri);
-                std::vector<float> interiorPts;
-                interiorPts.reserve(interior.size() * 2);
-                for (const auto &v : interior)
-                {
-                    interiorPts.push_back(static_cast<float>(v.x));
-                    interiorPts.push_back(static_cast<float>(v.y));
-                }
-                interiorPtsList.push_back(std::move(interiorPts));
-            }
-
-            if (interiorCount == 0)
-            {
-                // 无洞：直接填充和绘制轮廓
-                uploadAndDraw(exteriorPts, GL_TRIANGLE_FAN, cr, cg, cb, 0.2f);
-                auto strip = buildWideLineStrip(exteriorPts, true);
-                uploadAndDraw(strip, GL_TRIANGLE_STRIP, cr, cg, cb, 1.0f);
-            }
-            else
-            {
-                // 有洞：使用 stencil buffer 实现镂空填充（Even-Odd 规则）
-                // Step 1: 设置 stencil 操作（翻转位）
-                glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);
-                glStencilFunc(GL_ALWAYS, 0, 0x01);
-                glStencilOp(GL_KEEP, GL_KEEP, GL_INVERT);
-
-                // 绘制外环（翻转 stencil）
-                uploadAndDraw(exteriorPts, GL_TRIANGLE_FAN, 0, 0, 0, 0);
-
-                // 绘制内环（再次翻转，实现镂空）
-                for (const auto &interiorPts : interiorPtsList)
-                    uploadAndDraw(interiorPts, GL_TRIANGLE_FAN, 0, 0, 0, 0);
-
-                // Step 2: 在 stencil = 1 的区域填充颜色
-                glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-                glStencilFunc(GL_EQUAL, 0x01, 0x01);
-                glStencilOp(GL_KEEP, GL_KEEP, GL_KEEP);
-                uploadAndDraw(exteriorPts, GL_TRIANGLE_FAN, cr, cg, cb, 0.3f);
-
-                // Step 3: 恢复 stencil 状态，绘制轮廓
-                glStencilFunc(GL_ALWAYS, 0, 0xFF);
-                auto strip = buildWideLineStrip(exteriorPts, true);
-                uploadAndDraw(strip, GL_TRIANGLE_STRIP, cr, cg, cb, 1.0f);
-                for (const auto &interiorPts : interiorPtsList)
-                {
-                    auto interiorStrip = buildWideLineStrip(interiorPts, true);
-                    uploadAndDraw(interiorStrip, GL_TRIANGLE_STRIP, cr, cg, cb, 1.0f);
-                }
-            }
-        }
-    }
-}
-
 void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer, bool selected)
 {
     if (!geom || !layer) return;
@@ -552,10 +389,6 @@ void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer,
         // 线：使用图层线样式
         auto [r, g, b, a] = toFloat(selected ? QColor(255, 217, 0) : ls.color);
 
-        // 使用图层线宽临时更新 lineWidth_
-        float savedLineWidth = lineWidth_;
-        lineWidth_ = ls.width;
-
         const auto *line = static_cast<const geo::GeoLine *>(geom);
         for (std::size_t p = 0; p < line->partCount(); ++p)
         {
@@ -567,11 +400,9 @@ void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer,
                 pts.push_back(static_cast<float>(v.x));
                 pts.push_back(static_cast<float>(v.y));
             }
-            auto strip = buildWideLineStrip(pts, false);
+            auto strip = buildWideLineStrip(pts, false, ls.width);
             uploadAndDraw(strip, GL_TRIANGLE_STRIP, r, g, b, a);
         }
-
-        lineWidth_ = savedLineWidth;
     }
     else // Region
     {
@@ -585,10 +416,6 @@ void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer,
         {
             fr = 0.4f; fg = 0.7f; fb = 1.0f; fa = 0.7f;
         }
-
-        // 使用图层线宽临时更新 lineWidth_
-        float savedLineWidth = lineWidth_;
-        lineWidth_ = rs.lineWidth;
 
         const auto *region = static_cast<const geo::GeoRegion *>(geom);
         for (std::size_t p = 0; p < region->partCount(); ++p)
@@ -625,7 +452,7 @@ void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer,
                 // 无洞：直接填充和绘制轮廓
                 if (rs.showFill)
                     uploadAndDraw(exteriorPts, GL_TRIANGLE_FAN, fr, fg, fb, fa);
-                auto strip = buildWideLineStrip(exteriorPts, true);
+                auto strip = buildWideLineStrip(exteriorPts, true, rs.lineWidth);
                 uploadAndDraw(strip, GL_TRIANGLE_STRIP, lr, lg, lb, la);
             }
             else
@@ -659,30 +486,27 @@ void GeometryWidget::drawGeometry(const geo::Geometry *geom, const Layer *layer,
                 }
 
                 // 绘制轮廓（外环和所有内环）
-                auto strip = buildWideLineStrip(exteriorPts, true);
+                auto strip = buildWideLineStrip(exteriorPts, true, rs.lineWidth);
                 uploadAndDraw(strip, GL_TRIANGLE_STRIP, lr, lg, lb, la);
                 for (const auto &interiorPts : interiorPtsList)
                 {
-                    auto interiorStrip = buildWideLineStrip(interiorPts, true);
+                    auto interiorStrip = buildWideLineStrip(interiorPts, true, rs.lineWidth);
                     uploadAndDraw(interiorStrip, GL_TRIANGLE_STRIP, lr, lg, lb, la);
                 }
             }
         }
-
-        lineWidth_ = savedLineWidth;
     }
 }
 
 std::vector<float> GeometryWidget::buildWideLineStrip(const std::vector<float> &pts,
-                                                       bool closed) const
+                                                       bool closed, float lineWidth) const
 {
     // 将折线顶点扩展为宽线四边形带（TRIANGLE_STRIP）
-    // 法线方向在屏幕空间计算，半宽 = lineWidth_ / scale_ / 2
     const std::size_t n = pts.size() / 2;
     if (n < 2) return {};
 
     // 半宽转换为世界坐标
-    const float hw = lineWidth_ * 0.5f / static_cast<float>(scale_);
+    const float hw = lineWidth * 0.5f / static_cast<float>(scale_);
 
     // 计算每个顶点处的法线（相邻线段法线平均）
     std::vector<float> nx(n), ny(n);
@@ -747,62 +571,29 @@ std::vector<float> GeometryWidget::buildWideLineStrip(const std::vector<float> &
 }
 
 void GeometryWidget::fitView(){
-    // 优先使用图层模式
-    if (!layers_.empty())
-    {
-        double minX =  std::numeric_limits<double>::max();
-        double minY =  std::numeric_limits<double>::max();
-        double maxX = -std::numeric_limits<double>::max();
-        double maxY = -std::numeric_limits<double>::max();
-        bool any = false;
-
-        for (const auto *layer : layers_)
-        {
-            if (!layer || !layer->isVisible()) continue;
-            for (const auto &g : layer->geometries())
-            {
-                const auto bb = g->boundingBox();
-                minX = std::min(minX, bb.left);
-                minY = std::min(minY, bb.bottom);
-                maxX = std::max(maxX, bb.right);
-                maxY = std::max(maxY, bb.top);
-                any = true;
-            }
-        }
-
-        if (!any) return;
-
-        viewCx_ = (minX + maxX) * 0.5;
-        viewCy_ = (minY + maxY) * 0.5;
-
-        const double ww   = width()  > 0 ? width()  : 800;
-        const double wh   = height() > 0 ? height() : 600;
-        const double extX = (maxX - minX) * 0.5 * 1.1;
-        const double extY = (maxY - minY) * 0.5 * 1.1;
-
-        if (extX > 1e-10 && extY > 1e-10)
-            scale_ = std::min(ww * 0.5 / extX, wh * 0.5 / extY);
-        else
-            scale_ = 1.0;
-        return;
-    }
-
-    // 兼容旧接口
-    if (geometries_.empty()) return;
+    if (layers_.empty()) return;
 
     double minX =  std::numeric_limits<double>::max();
     double minY =  std::numeric_limits<double>::max();
     double maxX = -std::numeric_limits<double>::max();
     double maxY = -std::numeric_limits<double>::max();
+    bool any = false;
 
-    for (const auto *g : geometries_)
+    for (const auto *layer : layers_)
     {
-        const auto bb = g->boundingBox();
-        minX = std::min(minX, bb.left);
-        minY = std::min(minY, bb.bottom);
-        maxX = std::max(maxX, bb.right);
-        maxY = std::max(maxY, bb.top);
+        if (!layer || !layer->isVisible()) continue;
+        for (const auto &g : layer->geometries())
+        {
+            const auto bb = g->boundingBox();
+            minX = std::min(minX, bb.left);
+            minY = std::min(minY, bb.bottom);
+            maxX = std::max(maxX, bb.right);
+            maxY = std::max(maxY, bb.top);
+            any = true;
+        }
     }
+
+    if (!any) return;
 
     viewCx_ = (minX + maxX) * 0.5;
     viewCy_ = (minY + maxY) * 0.5;

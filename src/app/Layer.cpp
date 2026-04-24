@@ -68,12 +68,3 @@ const std::vector<std::unique_ptr<geo::Geometry>> &Layer::geometries() const
 {
     return geometries_;
 }
-
-std::vector<const geo::Geometry *> Layer::geometryPtrs() const
-{
-    std::vector<const geo::Geometry *> ptrs;
-    ptrs.reserve(geometries_.size());
-    for (const auto &g : geometries_)
-        ptrs.push_back(g.get());
-    return ptrs;
-}

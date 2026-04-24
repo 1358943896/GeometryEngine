@@ -17,6 +17,7 @@ add_executable_auto(GeometryViewer)
 target_sources(GeometryViewer PRIVATE
         ${CMAKE_SOURCE_DIR}/include/app/Layer.h
         ${CMAKE_SOURCE_DIR}/include/app/LayerManagerWidget.h
+        ${CMAKE_SOURCE_DIR}/include/app/MainWindow.h
 )
 
 target_include_directories(GeometryViewer PRIVATE ${CMAKE_SOURCE_DIR}/include)

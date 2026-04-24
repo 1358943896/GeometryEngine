@@ -5,6 +5,19 @@
 #include <QTreeWidget>
 #include <vector>
 
+//! \brief 样式子项类型标识，用于树控件中区分不同样式属性
+enum StyleItemType : int
+{
+    PointColor        = 0,  //!< 点颜色
+    PointSize         = 1,  //!< 点大小
+    LineColor         = 2,  //!< 线颜色
+    LineWidth         = 3,  //!< 线宽
+    RegionLineColor   = 4,  //!< 面边界线颜色
+    RegionLineWidth   = 5,  //!< 面边界线宽
+    RegionFillColor   = 6,  //!< 面填充颜色
+    RegionFillToggle  = 7   //!< 面填充开关
+};
+
 //! \brief 图层管理控件，显示图层列表并提供样式编辑功能
 class LayerManagerWidget : public QWidget
 {
@@ -46,9 +59,6 @@ private slots:
     //! \param item 图层项
     //! \param column 列索引
     void onItemDoubleClicked(QTreeWidgetItem *item, int column);
-
-    //! \brief 处理样式变化
-    void onStyleChanged();
 
 private:
     //! \brief 创建图层项

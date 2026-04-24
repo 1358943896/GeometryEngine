@@ -56,22 +56,25 @@ MainWindow::MainWindow(QWidget *parent)
 
 void MainWindow::onOpenFile()
 {
-    QString path = QFileDialog::getOpenFileName(
+    QStringList paths = QFileDialog::getOpenFileNames(
         this, "打开 WKT 文件", {}, "文本文件 (*.txt *.wkt);;所有文件 (*)");
-    if (path.isEmpty()) return;
+    if (paths.isEmpty()) return;
 
     try
     {
-        dataengine::WktFileReader reader(path.toStdString());
-        auto geometries = reader.read();
+        for (const QString &path : paths)
+        {
+            dataengine::WktFileReader reader(path.toStdString());
+            auto geometries = reader.read();
 
-        // 从路径提取文件名作为图层名
-        QString layerName = QFileInfo(path).fileName();
+            // 从路径提取文件名作为图层名
+            QString layerName = QFileInfo(path).fileName();
 
-        // 创建图层
-        auto layer = std::make_unique<Layer>(layerName, std::move(geometries));
-        layerManager_->addLayer(layer.get());
-        layerStore_.push_back(std::move(layer));
+            // 创建图层
+            auto layer = std::make_unique<Layer>(layerName, std::move(geometries));
+            layerManager_->addLayer(layer.get());
+            layerStore_.push_back(std::move(layer));
+        }
 
         updateLayers();
     }
